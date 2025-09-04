@@ -28,7 +28,22 @@ runs:
     - name: Install basic compiler
       run:  |
         sudo apt-get update
-        sudo apt-get install -y build-essential
+        sudo apt-get install -y build-essential cmake
+      shell: bash
+
+    - name: Get cmake version
+      id: cmake
+      run: echo "::set-output name=cmake-version::$(cmake --version | head -n1 | cut -d' ' -f3)"
+      shell: bash
+
+    - name: Ensure cmake version >= 3.27.8
+      if: steps.cmake.outputs.cmake-version < '3.27.8'
+      run:  |
+        sudo apt-get remove -y cmake
+        wget https://cmake.org/files/v3.27/cmake-3.27.8-linux-x86_64.tar.gz
+        tar -xzvf cmake-3.27.8-linux-x86_64.tar.gz && cd cmake-3.27.8-linux-x86_64
+        bash ./bootstrap && make -j$(nproc) && sudo make install
+        cmake --version
       shell: bash
 
     - name: Install third-party libraries
@@ -43,5 +58,6 @@ runs:
       shell: bash
 
     - name: Install Python packages for E2E tests
-      run: sudo apt-get install python3-yaml unzip pkg-config python3-icu
+      run: |
+        sudo apt-get install -y python3-yaml unzip pkg-config python3-icu
       shell: bash
