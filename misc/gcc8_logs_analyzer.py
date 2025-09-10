@@ -19,10 +19,12 @@ STL_FEATURE_CAPTURE_REGEX = re.compile(
 
 class ReportBuilder:
     """Builds a formatted report with optional grouping."""
-    def __init__(self, grouped=False):
+    def __init__(self, grouped=False, annotate=False, working_dir=""):
         self.lines = []
         self.grouped = grouped
         self.group_level = 0
+        self.annotate = annotate
+        self.working_dir = working_dir
 
     def add_tab(self):
         return "\t" * self.group_level
@@ -41,6 +43,15 @@ class ReportBuilder:
 
     def add_line(self, line):
         self.lines.append(f"{self.add_tab()}{line}")
+
+    def add_annotation(self, file="", line=0, col=0, message=""):
+        self.add_line(f"{file}:{line}:{col}: {message}")
+        if self.annotate:
+            # remove working directory from file path if specified
+            if self.working_dir and file.startswith(self.working_dir):
+                file = file[len(self.working_dir):].lstrip("/\\")
+            self.add_line(f"::error file={file},line={line}, col={col}::{message}")
+
 
     def get_report(self):
         while self.group_level > 0:
@@ -67,7 +78,7 @@ def parse_gcc_log(log_path):
     # Remove duplicates
     return { (e['filename'], e['line'], e['column'], e['message'], e['language_specific'], e['stl_specific']): e for e in errors }
 
-def generate_report(errors, grouped=False, details_in_group=False, test_mode=False):
+def generate_report(errors, grouped=False, annotate=False, details_in_group=False, test_mode=False, working_dir=""):
     """Generates a formatted error report."""
     consistency_check = True if test_mode else None
 
@@ -87,7 +98,7 @@ def generate_report(errors, grouped=False, details_in_group=False, test_mode=Fal
         if (match := STL_FEATURE_CAPTURE_REGEX.search(e['message']))
     })
 
-    builder = ReportBuilder(grouped)
+    builder = ReportBuilder(grouped=grouped, annotate=annotate, working_dir=working_dir)
     builder.add_line("GCC Error Log Report")
     builder.add_line("====================")
     builder.begin_group(f"Total Errors: {len(errors)}")
@@ -105,7 +116,7 @@ def generate_report(errors, grouped=False, details_in_group=False, test_mode=Fal
                 for err in feature_errors:
                     if test_mode:
                         accumulated_errors += 1
-                    builder.add_line(f"{err['filename']}:{err['line']}:{err['column']}: {err['message']}")
+                    builder.add_annotation(file=err['filename'], line=err['line'], col=err['column'], message=err['message'])
             else:
                 if test_mode:
                     accumulated_errors += len(feature_errors)
@@ -130,7 +141,7 @@ def generate_report(errors, grouped=False, details_in_group=False, test_mode=Fal
                 for err in feature_errors:
                     if test_mode:
                         accumulated_errors += 1
-                    builder.add_line(f"{err['filename']}:{err['line']}:{err['column']}: {err['message']}")
+                    builder.add_annotation(file=err['filename'], line=err['line'], col=err['column'], message=err['message'])
             else:
                 if test_mode:
                     accumulated_errors += len(feature_errors)
@@ -147,7 +158,7 @@ def generate_report(errors, grouped=False, details_in_group=False, test_mode=Fal
         builder.begin_group(f"General Errors: {len(general_errors)}", collapse=True)
         if details_in_group:
             for err in general_errors:
-                builder.add_line(f"{err['filename']}:{err['line']}:{err['column']}: {err['message']}")
+                builder.add_annotation(file=err['filename'], line=err['line'], col=err['column'], message=err['message'])
         builder.end_group(collapse=True)
 
     # Details section
@@ -155,21 +166,23 @@ def generate_report(errors, grouped=False, details_in_group=False, test_mode=Fal
         if lang_specific_errors:
             builder.begin_group("Language-Specific Errors Details", collapse=True)
             for err in lang_specific_errors:
-                builder.add_line(f"{err['filename']}:{err['line']}:{err['column']}: {err['message']}")
+                builder.add_annotation(file=err['filename'], line=err['line'], col=err['column'], message=err['message'])
             builder.end_group()
         if stl_specific_errors:
             builder.begin_group("STL-Specific Errors Details", collapse=True)
             for err in stl_specific_errors:
-                builder.add_line(f"{err['filename']}:{err['line']}:{err['column']}: {err['message']}")
+                builder.add_annotation(file=err['filename'], line=err['line'], col=err['column'], message=err['message'])
             builder.end_group()
         if general_errors:
             builder.begin_group("General Errors Details", collapse=True)
             for err in general_errors:
-                builder.add_line(f"{err['filename']}:{err['line']}:{err['column']}: {err['message']}")
+                builder.add_annotation(file=err['filename'], line=err['line'], col=err['column'], message=err['message'])
             builder.end_group()
 
     builder.end_group()
     if test_mode:
+        if builder.group_level != 0:
+            builder.add_line(f"ERROR: Mismatched group levels: {builder.group_level}")
         if consistency_check:
             builder.add_line("::notice::Consistency check passed: Accumulated error counts match totals.")
         else:
@@ -178,18 +191,26 @@ def generate_report(errors, grouped=False, details_in_group=False, test_mode=Fal
 
 def main():
     grouped = False
+    annotate = False
     details_in_group = False
-    args = [a for a in sys.argv[1:] if a not in ('--on-github', '--test')]
+    working_dir = "/home/runner/work/qlever/qlever"
+    args = [a for a in sys.argv[1:] if a not in ('--on-github', '--test' ,"--annotate")]
     test_mode = '--test' in sys.argv
     if '--on-github' in sys.argv:
         grouped = True
         details_in_group = True
+        if '--annotate' in sys.argv: annotate = True
     if len(args) < 1:
         print("Usage: python gcc8_logs_analyzer.py <gcc_output_log_file> [--on-github] [--test]")
         sys.exit(1)
     log_file = args[0]
     errors = list(parse_gcc_log(log_file).values())
-    report = generate_report(errors, grouped=grouped, details_in_group=details_in_group, test_mode=test_mode)
+    report = generate_report(errors,
+                             grouped=grouped,
+                             annotate=annotate,
+                             working_dir=working_dir,
+                             details_in_group=details_in_group,
+                             test_mode=test_mode)
     print(report)
 
 if __name__ == "__main__":
