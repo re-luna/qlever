@@ -1,4 +1,4 @@
-# Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
+# Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG) 
 
 import re
 import sys
@@ -50,7 +50,7 @@ class ReportBuilder:
             # remove working directory from file path if specified
             if self.working_dir and file.startswith(self.working_dir):
                 file = file[len(self.working_dir):].lstrip("/\\")
-            self.add_line(f"::error file={file},line={line}, col={col}::{message}")
+            self.lines.append(f"::error file={file},line={line}, col={col}::{message}")
 
 
     def get_report(self):

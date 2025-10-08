@@ -73,7 +73,7 @@ jobs:
       - name: Run gcc8 log analyzer on gcc8 builds
         if: matrix.compiler-version == 8
         run: |
-          python ${{ github.workspace }}/misc/gcc8_logs_analyzer.py /tmp/build.log --on-github
+          python ${{ github.workspace }}/misc/gcc8_logs_analyzer.py /tmp/build.log --on-github --annotate
         id: gcc8_log_analyzer
       - name: Test
         id: runTest
